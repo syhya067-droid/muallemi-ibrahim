@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>مُعلّمي | إدارة الطلاب</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Tahoma,sans-serif;background:#f4f6fa;color:#172033}
+header{background:#101827;color:#fff;padding:18px 16px;position:sticky;top:0;z-index:2}
+header h1{margin:0;font-size:25px}header small{opacity:.8}
+nav{display:flex;gap:8px;overflow:auto;padding:10px;background:#fff;position:sticky;top:72px;z-index:2}
+nav button{border:0;background:#eef1f6;padding:10px 14px;border-radius:12px;white-space:nowrap}
+nav button.active{background:#101827;color:#fff}
+main{padding:14px;max-width:900px;margin:auto}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.card{background:#fff;border-radius:18px;padding:16px;box-shadow:0 3px 14px #0000000b;margin-bottom:12px}
+.stat b{font-size:28px;display:block;margin-top:6px}.gold{color:#b58a22}
+input,select{width:100%;padding:12px;border:1px solid #d8dce5;border-radius:10px;margin:6px 0 10px;font-size:16px}
+button.primary{background:#101827;color:#fff;border:0;border-radius:10px;padding:12px 16px}
+button.danger{background:#b42318;color:#fff;border:0;border-radius:10px;padding:10px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.student{border:1px solid #e4e7ee;border-radius:14px;padding:12px;margin:8px 0}
+.badge{display:inline-block;padding:5px 9px;border-radius:99px;background:#eef1f6;font-size:12px}
+.hidden{display:none}.muted{color:#687386;font-size:13px}
+table{width:100%;border-collapse:collapse}td,th{padding:9px;border-bottom:1px solid #eee;text-align:right}
+@media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<header><h1>مُعلّمي</h1><small>Mr. Ibrahim Aboueldahab · English Teacher</small></header>
+<nav id="nav"></nav>
+<main id="app"></main>
+<script>
+const KEY='muallemi_v1_data';
+let data=JSON.parse(localStorage.getItem(KEY)||'{"students":[],"attendance":[],"grades":[],"payments":[]}');
+const pages=['الرئيسية','الطلاب','الحضور','الدرجات','المدفوعات','التقارير','الأرشيف','نسخة احتياطية'];
+let current='الرئيسية';
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function nav(){document.getElementById('nav').innerHTML=pages.map(p=>`<button class="${p===current?'active':''}" onclick="go('${p}')">${p}</button>`).join('')}
+function go(p){current=p;nav();render()}
+function render(){
+ const a=document.getElementById('app');
+ if(current==='الرئيسية')return dashboard(a);
+ if(current==='الطلاب')return students(a);
+ if(current==='الحضور')return attendance(a);
+ if(current==='الدرجات')return grades(a);
+ if(current==='المدفوعات')return payments(a);
+ if(current==='التقارير')return reports(a);
+ if(current==='الأرشيف')return archive(a);
+ backup(a)
+}
+function dashboard(a){
+ const active=data.students.filter(s=>!s.archived), due=active.reduce((x,s)=>x+(+s.fees||0)-paid(s.id),0);
+ a.innerHTML=`<h2>لوحة التحكم</h2><div class="grid">
+ <div class="card stat">الطلاب النشطون<b>${active.length}</b></div>
+ <div class="card stat">إجمالي المستحق<b class="gold">${due} ج</b></div>
+ <div class="card stat">حاضر اليوم<b>${data.attendance.filter(x=>x.date===today()&&x.status==='حاضر').length}</b></div>
+ <div class="card stat">غائب اليوم<b>${data.attendance.filter(x=>x.date===today()&&x.status==='غائب').length}</b></div></div>
+ <div class="card"><h3>مُعلّمي — إدارة أسهل</h3><p class="muted">إدارة الطلاب، الحضور، الدرجات، التسميع والمدفوعات من مكان واحد.</p></div>`;
+}
+function students(a){
+ a.innerHTML=`<h2>الطلاب</h2><div class="card"><input id="q" placeholder="بحث باسم الطالب..." oninput="listStudents()"><div id="list"></div></div>
+ <div class="card"><h3>إضافة طالب</h3><input id="sn" placeholder="اسم الطالب"><input id="sp" placeholder="هاتف الطالب"><input id="pn" placeholder="اسم ولي الأمر"><input id="pp" placeholder="هاتف ولي الأمر"><input id="grp" placeholder="المجموعة"><input id="fee" type="number" placeholder="الرسوم"><button class="primary" onclick="addStudent()">إضافة الطالب</button></div>`;
+ listStudents();
+}
+function listStudents(){
+ const q=(document.getElementById('q')?.value||'').toLowerCase();
+ const el=document.getElementById('list'); if(!el)return;
+ el.innerHTML=data.students.filter(s=>!s.archived&&s.name.toLowerCase().includes(q)).map(s=>`<div class="student"><div class="row"><b>${s.name}</b><span class="badge">${s.group||'بدون مجموعة'}</span></div><div class="muted">الطالب: ${s.phone||'-'} · ولي الأمر: ${s.parentPhone||'-'} · الرسوم: ${s.fees||0} ج</div><div style="margin-top:8px"><button class="primary" onclick="archiveStudent('${s.id}')">أرشفة</button> <button class="primary" onclick="wa('${s.parentPhone||s.phone||''}','مرحباً، هذا تقرير من مُعلّمي عن الطالب ${s.name}.')">واتساب</button></div></div>`).join('')||'<p class="muted">لا يوجد طلاب.</p>';
+}
+function addStudent(){
+ const name=document.getElementById('sn').value.trim(); if(!name)return alert('اكتب اسم الطالب');
+ data.students.push({id:Date.now().toString(),name,phone:sp.value,parentName:pn.value,parentPhone:pp.value,group:grp.value,fees:+fee.value||0,archived:false});
+ save();students(document.getElementById('app'));
+}
+function archiveStudent(id){const s=data.students.find(x=>x.id===id);if(s){s.archived=true;save();students(document.getElementById('app'))}}
+function archive(a){a.innerHTML='<h2>الأرشيف</h2>'+data.students.filter(s=>s.archived).map(s=>`<div class="card"><b>${s.name}</b><button class="primary" onclick="restore('${s.id}')">استعادة</button></div>`).join('')||'<div class="card">الأرشيف فارغ.</div>'}
+function restore(id){let s=data.students.find(x=>x.id===id);if(s){s.archived=false;save();archive(document.getElementById('app'))}}
+function attendance(a){
+ a.innerHTML=`<h2>الحضور</h2><div class="card"><label>التاريخ</label><input id="ad" type="date" value="${today()}"><label>المجموعة</label><input id="ag" placeholder="المجموعة"><div id="alist"></div></div>`;
+ renderAttendance();
+}
+function renderAttendance(){
+ const el=document.getElementById('alist'); if(!el)return; const d=document.getElementById('ad').value;
+ el.innerHTML=data.students.filter(s=>!s.archived).map(s=>{let old=data.attendance.find(x=>x.studentId===s.id&&x.date===d);return `<div class="student"><b>${s.name}</b><select onchange="setAtt('${s.id}',this.value)"><option ${old?.status==='حاضر'?'selected':''}>حاضر</option><option ${old?.status==='غائب'?'selected':''}>غائب</option><option ${old?.status==='متأخر'?'selected':''}>متأخر</option></select></div>`}).join('');
+ document.getElementById('ad').onchange=renderAttendance;
+}
+function setAtt(id,status){const date=document.getElementById('ad').value;data.attendance=data.attendance.filter(x=>!(x.studentId===id&&x.date===date));data.attendance.push({studentId:id,date,status});save()}
+function grades(a){
+ a.innerHTML=`<h2>الدرجات والتسميع</h2><div class="card"><select id="gs">${data.students.filter(s=>!s.archived).map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select><select id="gt"><option>امتحان</option><option>واجب</option><option>تسميع</option></select><input id="gv" type="number" placeholder="الدرجة"><input id="gm" type="number" value="100" placeholder="من"><button class="primary" onclick="addGrade()">حفظ الدرجة</button></div><div class="card">${data.grades.slice().reverse().map(g=>`<div class="student">${studentName(g.studentId)} — ${g.type}: <b>${g.value}/${g.max}</b> <span class="muted">${g.date}</span></div>`).join('')}</div>`
+}
+function addGrade(){data.grades.push({studentId:gs.value,type:gt.value,value:+gv.value||0,max:+gm.value||100,date:today()});save();grades(document.getElementById('app'))}
+function payments(a){
+ a.innerHTML=`<h2>المدفوعات</h2><div class="card"><select id="ps">${data.students.filter(s=>!s.archived).map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select><input id="pv" type="number" placeholder="المبلغ المدفوع"><button class="primary" onclick="addPay()">تسجيل الدفع</button></div><div class="card"><table><tr><th>الطالب</th><th>الرسوم</th><th>المدفوع</th><th>المتبقي</th></tr>${data.students.filter(s=>!s.archived).map(s=>`<tr><td>${s.name}</td><td>${s.fees||0}</td><td>${paid(s.id)}</td><td>${(+s.fees||0)-paid(s.id)}</td></tr>`).join('')}</table></div>`
+}
+function addPay(){data.payments.push({studentId:ps.value,value:+pv.value||0,date:today()});save();payments(document.getElementById('app'))}
+function reports(a){const active=data.students.filter(s=>!s.archived);a.innerHTML=`<h2>التقارير</h2><div class="card"><p>إجمالي الطلاب: <b>${active.length}</b></p><p>إجمالي الرسوم: <b>${active.reduce((x,s)=>x+(+s.fees||0),0)} ج</b></p><p>إجمالي المدفوع: <b>${data.payments.reduce((x,p)=>x+(+p.value||0),0)} ج</b></p><p>إجمالي المتبقي: <b>${active.reduce((x,s)=>x+(+s.fees||0)-paid(s.id),0)} ج</b></p></div>`}
+function backup(a){a.innerHTML=`<h2>نسخة احتياطية</h2><div class="card"><p>احتفظ بنسخة من بياناتك على هاتفك.</p><button class="primary" onclick="download()">تصدير البيانات</button><label style="display:block;margin-top:12px">استيراد نسخة<input type="file" accept=".json" onchange="importData(this.files[0])"></label></div>`}
+function download(){const blob=new Blob([JSON.stringify(data)],{type:'application/json'}),u=URL.createObjectURL(blob),x=document.createElement('a');x.href=u;x.download='muallemi-backup.json';x.click();URL.revokeObjectURL(u)}
+function importData(f){const r=new FileReader();r.onload=()=>{try{data=JSON.parse(r.result);save();render()}catch(e){alert('ملف غير صالح')}};r.readAsText(f)}
+function paid(id){return data.payments.filter(p=>p.studentId===id).reduce((x,p)=>x+(+p.value||0),0)}
+function studentName(id){return data.students.find(s=>s.id===id)?.name||'طالب'}
+function today(){return new Date().toISOString().slice(0,10)}
+function wa(phone,text){if(!phone)return alert('لا يوجد رقم هاتف');location.href='https://wa.me/'+phone.replace(/\D/g,'')+'?text='+encodeURIComponent(text)}
+nav();render();
+</script>
+</body></html>
